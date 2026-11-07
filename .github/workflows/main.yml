@@ -1,4 +1,13 @@
 
+
+      - name: Accept Android SDK licenses
+        run: |
+          printf 'y\n%.0s' {1..20} | sdkmanager --licenses
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
 name: Build Pranayama APK
 
 on:
