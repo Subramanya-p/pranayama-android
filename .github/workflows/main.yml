@@ -35,18 +35,37 @@ jobs:
         run: |
           sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Extract Android project
+      - name: Diagnose and extract Android project
         run: |
-          unzip -q PranayamaAndroid.zip -d extracted
+          echo "Checking ZIP file..."
+          ls -lh PranayamaAndroid.zip
+          file PranayamaAndroid.zip
+
+          echo "Testing ZIP archive..."
+          unzip -t PranayamaAndroid.zip
+
+          echo "Extracting ZIP archive..."
+          unzip PranayamaAndroid.zip -d extracted
+
+          echo "Looking for Gradle wrapper..."
+          find extracted -name gradlew -type f
+
+      - name: Locate and prepare Android project
+        run: |
           PROJECT_DIR=$(dirname "$(find extracted -name gradlew -type f -print -quit)")
-          test -f "$PROJECT_DIR/gradlew"
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/gradlew" ]; then
+            echo "ERROR: Gradle wrapper not found in ZIP."
+            exit 1
+          fi
           cp -a "$PROJECT_DIR"/. .
 
       - name: Check project files
         run: |
+          echo "Checking Android project..."
           ls -la
           test -f gradlew
           test -d app
+          test -d gradle
 
       - name: Build APK
         run: |
