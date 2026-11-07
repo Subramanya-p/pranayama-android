@@ -1,3 +1,4 @@
+
 name: Build Pranayama APK
 
 on:
@@ -13,10 +14,14 @@ jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
-      - name: Check out repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -25,38 +30,91 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Set up Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Extract Android project from ZIP
+      - name: Locate Android SDK tools
+        shell: bash
         run: |
-          unzip -q PranayamaAndroid.zip -d extracted
-          PROJECT_DIR="$(find extracted -type f -name settings.gradle.kts -printf '%h\n' | head -n 1)"
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: settings.gradle.kts was not found inside PranayamaAndroid.zip"
+          echo "Android SDK: $ANDROID_HOME"
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager was not found."
             exit 1
           fi
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project found at: $PROJECT_DIR"
-          test -d "$PROJECT_DIR/app"
-          test -f "$PROJECT_DIR/app/build.gradle.kts"
+
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Accept Android SDK licences
+        shell: bash
+        run: |
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
+
+      - name: Install Android SDK platform and build tools
+        shell: bash
+        run: |
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Extract Android project from ZIP
+        shell: bash
+        run: |
+          if [ ! -f PranayamaAndroid.zip ]; then
+            echo "ERROR: PranayamaAndroid.zip is missing."
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -q PranayamaAndroid.zip -d extracted
+
+          APP_BUILD_FILE=$(find extracted -type f -path '*/app/build.gradle.kts' -print -quit)
+
+          if [ -z "$APP_BUILD_FILE" ]; then
+            echo "ERROR: app/build.gradle.kts not found inside ZIP."
+            find extracted -maxdepth 5 -type f | head -80
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$(dirname "$APP_BUILD_FILE")")
+
+          cp -a "$PROJECT_DIR"/. .
+
+          if [ ! -f app/build.gradle.kts ] || [ ! -f settings.gradle.kts ]; then
+            echo "ERROR: Android project files are incomplete."
+            exit 1
+          fi
+
+          echo "Android project extracted successfully."
+          ls -la
+
+      - name: Install Gradle 8.9
+        shell: bash
+        run: |
+          curl -fsSLo /tmp/gradle-8.9-bin.zip \
+            https://services.gradle.org/distributions/gradle-8.9-bin.zip
+
+          sudo mkdir -p /opt/gradle
+          sudo unzip -q /tmp/gradle-8.9-bin.zip -d /opt/gradle
+
+          echo "/opt/gradle/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+      - name: Check Gradle and project
+        shell: bash
+        run: |
+          gradle --version
+          test -f app/build.gradle.kts
+          test -f settings.gradle.kts
 
       - name: Build debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle --no-daemon clean assembleDebug
+        shell: bash
+        run: |
+          gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Pranayama-Android-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
