@@ -14,7 +14,7 @@ jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
 
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
@@ -94,10 +94,10 @@ jobs:
 
           echo "Android project extracted successfully."
 
-          echo "===== VERIFYING MAINACTIVITY FIX ====="
+          echo "===== VERIFYING MAINACTIVITY ====="
           grep -R -n "fun refreshStats" app/src/main/java/ || true
 
-          echo "===== VERIFYING PRACTICESERVICE FIXES ====="
+          echo "===== VERIFYING PRACTICESERVICE ====="
           grep -R -n "elapsedSeconds()" app/src/main/java/ || true
 
           echo "===== SOURCE FILE LOCATIONS ====="
@@ -112,8 +112,12 @@ jobs:
           for attempt in 1 2 3 4 5; do
             echo "Gradle download attempt $attempt of 5"
 
-            if curl -fSL --connect-timeout 30 --max-time 300 \
-              --retry 3 --retry-all-errors --retry-delay 10 \
+            if curl -fSL \
+              --connect-timeout 30 \
+              --max-time 300 \
+              --retry 3 \
+              --retry-all-errors \
+              --retry-delay 10 \
               -o /tmp/gradle-8.9-bin.zip \
               https://services.gradle.org/distributions/gradle-8.9-bin.zip; then
               break
@@ -145,7 +149,22 @@ jobs:
       - name: Build debug APK
         shell: bash
         run: |
-          gradle --no-daemon assembleDebug
+          for attempt in 1 2 3 4; do
+            echo "===== BUILD ATTEMPT $attempt OF 4 ====="
+
+            if gradle --no-daemon assembleDebug; then
+              echo "APK build completed successfully."
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 4 ]; then
+              echo "Build failed. Waiting 20 seconds before retry..."
+              sleep 20
+            fi
+          done
+
+          echo "ERROR: Build failed after 4 attempts."
+          exit 1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
