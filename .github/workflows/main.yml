@@ -109,8 +109,26 @@ jobs:
       - name: Install Gradle 8.9
         shell: bash
         run: |
-          curl -fsSLo /tmp/gradle-8.9-bin.zip \
-            https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          for attempt in 1 2 3 4 5; do
+            echo "Gradle download attempt $attempt of 5"
+
+            if curl -fSL --connect-timeout 30 --max-time 300 \
+              --retry 3 --retry-all-errors --retry-delay 10 \
+              -o /tmp/gradle-8.9-bin.zip \
+              https://services.gradle.org/distributions/gradle-8.9-bin.zip; then
+              break
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "ERROR: Gradle download failed after 5 attempts."
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+          echo "===== VERIFYING GRADLE DOWNLOAD ====="
+          unzip -tq /tmp/gradle-8.9-bin.zip
 
           sudo mkdir -p /opt/gradle
           sudo unzip -q /tmp/gradle-8.9-bin.zip -d /opt/gradle
