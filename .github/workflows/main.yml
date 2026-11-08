@@ -65,6 +65,10 @@ jobs:
             exit 1
           fi
 
+          echo "===== ZIP FILE DETAILS ====="
+          ls -lh PranayamaAndroid.zip
+          sha256sum PranayamaAndroid.zip
+
           mkdir -p extracted
           unzip -q PranayamaAndroid.zip -d extracted
 
@@ -78,6 +82,9 @@ jobs:
 
           PROJECT_DIR=$(dirname "$(dirname "$APP_BUILD_FILE")")
 
+          echo "===== PROJECT DIRECTORY FOUND ====="
+          echo "$PROJECT_DIR"
+
           cp -a "$PROJECT_DIR"/. .
 
           if [ ! -f app/build.gradle.kts ] || [ ! -f settings.gradle.kts ]; then
@@ -86,7 +93,18 @@ jobs:
           fi
 
           echo "Android project extracted successfully."
-          ls -la
+
+          echo "===== VERIFYING MAINACTIVITY FIX ====="
+          grep -R -n "fun refreshStats" app/src/main/java/ || true
+
+          echo "===== VERIFYING PRACTICESERVICE FIXES ====="
+          grep -R -n "elapsedSeconds()" app/src/main/java/ || true
+
+          echo "===== SOURCE FILE LOCATIONS ====="
+          find app/src/main/java -name "*.kt"
+
+          echo "===== VERIFYING JAVA/KOTLIN TARGETS ====="
+          grep -n -E "jvmTarget|sourceCompatibility|targetCompatibility" app/build.gradle.kts || true
 
       - name: Install Gradle 8.9
         shell: bash
